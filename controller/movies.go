@@ -2,217 +2,118 @@ package controller
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
+	"io/ioutil"
+	"log"
 	"net/http"
-	"net/url"
+	"os"
 )
 
-const (
-	baseURL  = "http://www.omdbapi.com/?"
-	plot     = "full"
-	tomatoes = "true"
-
-	MovieSearch   = "movie"
-	SeriesSearch  = "series"
-	EpisodeSearch = "episode"
-)
-
-type OmdbApi struct {
-	apiKey string
+// A Response struct to map the Entire Response
+type Response struct {
+	Search []Search `json:"Search"`
 }
 
-func Init(apiKey string) *OmdbApi {
-	return &OmdbApi{apiKey: apiKey}
+// A Pokemon Struct to map every pokemon to.
+type Search struct {
+	Title  string `json:"Title"`
+	Year   string `json:"Year"`
+	ImdbID string `json:"imdbID"`
+	Type   string `json:"Type"`
+	Poster string `json:"Poster"`
 }
 
-// QueryData is the type to create the search query
-type QueryData struct {
-	Title      string
-	Year       string
-	ImdbId     string
-	SearchType string
+type Detail struct {
+	Title    string `json:"Title"`
+	Year     string `json:"Year"`
+	Rated    string `json:"Rated"`
+	Released string `json:"Released"`
+	Runtime  string `json:"Runtime"`
+	Genre    string `json:"Genre"`
+	Director string `json:"Director"`
+	Writer   string `json:"Writer"`
+	Actors   string `json:"Actors"`
+	Plot     string `json:"Plot"`
+	Language string `json:"Language"`
+	Country  string `json:"Country"`
+	Awards   string `json:"Awards"`
+	Poster   string `json:"Poster"`
+	Ratings  []struct {
+		Source string `json:"Source"`
+		Value  string `json:"Value"`
+	} `json:"Ratings"`
+	Metascore  string `json:"Metascore"`
+	ImdbRating string `json:"imdbRating"`
+	ImdbVotes  string `json:"imdbVotes"`
+	ImdbID     string `json:"imdbID"`
+	Type       string `json:"Type"`
+	Dvd        string `json:"DVD"`
+	BoxOffice  string `json:"BoxOffice"`
+	Production string `json:"Production"`
+	Website    string `json:"Website"`
+	Response   string `json:"Response"`
 }
 
-//SearchResult is the type for the search results
-type SearchResult struct {
-	Title  string
-	Year   string
-	ImdbID string
-	Type   string
-}
-
-//SearchResponse is the struct of the response in a search
-type SearchResponse struct {
-	Search       []SearchResult
-	Response     string
-	Error        string
-	totalResults int
-}
-
-//MovieResult is the result struct of an specific movie search
-type MovieResult struct {
-	Title             string
-	Year              string
-	Rated             string
-	Released          string
-	Runtime           string
-	Genre             string
-	Director          string
-	Writer            string
-	Actors            string
-	Plot              string
-	Language          string
-	Country           string
-	Awards            string
-	Poster            string
-	Metascore         string
-	ImdbRating        string
-	ImdbVotes         string
-	ImdbID            string
-	Type              string
-	TomatoMeter       string
-	TomatoImage       string
-	TomatoRating      string
-	TomatoReviews     string
-	TomatoFresh       string
-	TomatoRotten      string
-	TomatoConsensus   string
-	TomatoUserMeter   string
-	TomatoUserRating  string
-	TomatoUserReviews string
-	TomatoURL         string
-	DVD               string
-	BoxOffice         string
-	Production        string
-	Website           string
-	Response          string
-	Error             string
-}
-
-//Search for movies given a Title and year, Year is optional you can pass nil
-func (api *OmdbApi) Search(query *QueryData) (*SearchResponse, error) {
-	resp, err := api.requestAPI("search", query.Title, query.Year, query.SearchType)
+func SearchApi(s string, api string, page int) int {
+	url := fmt.Sprintf("http://www.omdbapi.com/?apikey=%s&s=%s&page=%d", api, s, page)
+	response, err := http.Get(url)
 	if err != nil {
-		return nil, err
+		fmt.Print(err.Error())
+		os.Exit(1)
 	}
-	defer resp.Body.Close()
 
-	r := new(SearchResponse)
-	err = json.NewDecoder(resp.Body).Decode(r)
-
+	responseData, err := ioutil.ReadAll(response.Body)
 	if err != nil {
-		return nil, err
-	}
-	if r.Response == "False" {
-		return r, errors.New(r.Error)
+		log.Fatal(err)
 	}
 
-	return r, nil
+	var responseObject Response
+	json.Unmarshal(responseData, &responseObject)
+
+	fmt.Println(responseObject.Search)
+	fmt.Println(len(responseObject.Search))
+
+	for i := 0; i < len(responseObject.Search); i++ {
+		fmt.Println(responseObject.Search[i].Title)
+	}
+	return len(responseObject.Search)
 }
 
-//MovieByTitle returns a MovieResult given Title
-func (api *OmdbApi) MovieByTitle(query *QueryData) (*MovieResult, error) {
-	resp, err := api.requestAPI("title", query.Title, query.Year, query.SearchType)
+func GetDetail(id string, api string, page int) {
+	url := fmt.Sprintf("http://www.omdbapi.com/?apikey=%s&i=%s&page=%d", api, id, page)
+	response, err := http.Get(url)
 	if err != nil {
-		return nil, err
+		fmt.Print(err.Error())
+		os.Exit(1)
 	}
-	defer resp.Body.Close()
 
-	r := new(MovieResult)
-	err = json.NewDecoder(resp.Body).Decode(r)
-
+	responseData, err := ioutil.ReadAll(response.Body)
 	if err != nil {
-		return nil, err
-	}
-	if r.Response == "False" {
-		return r, errors.New(r.Error)
-	}
-	return r, nil
-}
-
-//MovieByImdbID returns a MovieResult given a ImdbID ex:"tt2015381"
-func (api *OmdbApi) MovieByImdbID(id string) (*MovieResult, error) {
-	resp, err := api.requestAPI("id", id)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	r := new(MovieResult)
-	err = json.NewDecoder(resp.Body).Decode(r)
-
-	if err != nil {
-		return nil, err
-	}
-	if r.Response == "False" {
-		return r, errors.New(r.Error)
-	}
-	return r, nil
-}
-
-// helper function to call the API
-// param: apiCategory refers to which API we are calling. Can be "search", "title" or "id"
-// Depending on that value, we will search by "t" or "s" or "i"
-// param: params are the variadic list of params passed for that category
-func (api *OmdbApi) requestAPI(apiCategory string, params ...string) (resp *http.Response, err error) {
-	var URL *url.URL
-	URL, err = url.Parse(baseURL)
-	if err != nil {
-		return nil, err
+		log.Fatal(err)
 	}
 
-	// Checking for invalid category
-	if len(params) > 1 && params[2] != "" {
-		if params[2] != MovieSearch &&
-			params[2] != SeriesSearch &&
-			params[2] != EpisodeSearch {
-			return nil, errors.New("Invalid search category- " + params[2])
-		}
+	var responseObject Detail
+	json.Unmarshal(responseData, &responseObject)
+
+	fmt.Println(responseObject)
+	fmt.Println(responseObject.Year)
+	fmt.Println(responseObject.Rated)
+	fmt.Println(responseObject.Released)
+	fmt.Println(responseObject.Runtime)
+	fmt.Println(responseObject.Genre)
+	fmt.Println(responseObject.Director)
+	fmt.Println(responseObject.Writer)
+	fmt.Println(responseObject.Actors)
+	fmt.Println(responseObject.Plot)
+	fmt.Println(responseObject.Language)
+	fmt.Println(responseObject.Country)
+	fmt.Println(responseObject.Awards)
+	fmt.Println(responseObject.Poster)
+
+	fmt.Println(len(responseObject.Ratings))
+
+	for i := 0; i < len(responseObject.Ratings); i++ {
+		fmt.Println(responseObject.Ratings[i].Source)
+		fmt.Println(responseObject.Ratings[i].Value)
 	}
-	URL.Path += "/"
-	parameters := url.Values{}
-	parameters.Add("apikey", api.apiKey)
-
-	switch apiCategory {
-	case "search":
-		parameters.Add("s", params[0])
-		parameters.Add("y", params[1])
-		parameters.Add("type", params[2])
-	case "title":
-		parameters.Add("t", params[0])
-		parameters.Add("y", params[1])
-		parameters.Add("type", params[2])
-		parameters.Add("plot", plot)
-		parameters.Add("tomatoes", tomatoes)
-	case "id":
-		parameters.Add("i", params[0])
-		parameters.Add("plot", plot)
-		parameters.Add("tomatoes", tomatoes)
-	}
-
-	URL.RawQuery = parameters.Encode()
-	res, err := http.Get(URL.String())
-	err = checkErr(res.StatusCode)
-	if err != nil {
-		return nil, err
-	}
-	return res, nil
-}
-
-func checkErr(status int) error {
-	if status != 200 {
-		return fmt.Errorf("Status Code %d received from IMDB", status)
-	}
-	return nil
-}
-
-//Stringer Interface for MovieResult
-func (mr MovieResult) String() string {
-	return fmt.Sprintf("#%s: %s (%s)", mr.ImdbID, mr.Title, mr.Year)
-}
-
-//Stringer Interface for SearchResult
-func (sr SearchResult) String() string {
-	return fmt.Sprintf("#%s: %s (%s) Type: %s", sr.ImdbID, sr.Title, sr.Year, sr.Type)
 }
